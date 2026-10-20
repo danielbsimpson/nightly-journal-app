@@ -6,42 +6,46 @@ A local-first journaling app that turns your spoken thoughts into structured, se
 Microphone → Whisper (STT) → Ollama (LLM) → Structured Journal Entry → Local Storage
 ```
 
-No cloud. No subscriptions. Your thoughts stay yours.
+No cloud. No subscriptions. Everything runs on your own machine — see [Privacy & Threat Model](#privacy--threat-model) for exactly what that does and does not protect.
 
 ---
 
 ## What It Does
 
 1. **Record** — hit the mic button and speak your thoughts, unfiltered
-2. **Transcribe** — faster-whisper converts your speech to text locally on your GPU
-3. **Process** — Ollama reads the transcript and generates:
+2. **Transcribe** — faster-whisper converts your speech to text locally; the audio itself is then discarded
+3. **Process** — Ollama reads the transcript and produces a **draft** containing:
    - A clean, readable **summary**
    - A meaningful **title**
-   - A **mood / tone** label (reflective, anxious, grateful, excited…)
+   - A **mood**, chosen from a fixed set (reflective, anxious, grateful, excited…)
    - **Topic tags** (work, health, relationships, goals…)
    - Any **action items** you mentioned
-4. **Save** — the entry is saved as a JSON file in your local `journals/` folder
-5. **Review** — browse, search, filter, and edit past entries in the UI
-6. **Insights** — visualize mood trends, streaks, and frequent topics over time
+4. **Review & save** — you read the draft and either save it as a JSON file in your local `journals/` folder, or discard it
+5. **Revisit** — browse past entries and correct anything the model got wrong
+6. **Insights** — visualize mood trends, streaks, and frequent topics over time *(planned)*
+
+The draft in step 4 lives in your browser and is never written to disk until you save it. The transcript, once saved, is never altered — see [What you can edit](#what-you-can-edit).
 
 ---
 
 ## Features
 
-- 🎙 **Local speech-to-text** via faster-whisper (no audio ever leaves your machine)
+- 🎙 **Local speech-to-text** via faster-whisper — audio is transcribed on your machine, then deleted
 - 🧠 **LLM-powered journaling** via Ollama — summarize, title, tag, and detect mood
-- 📓 **Clean journal UI** with sidebar navigation, search, and tag filtering
-- 📊 **Insights dashboard** — mood over time, tag cloud, and entry streaks
+- 📓 **Clean journal UI** with sidebar navigation and an entry detail view
 - 💾 **Plain JSON storage** — no database, entries are readable files you own
-- 📤 **Export to Markdown, JSON, or ZIP** for backup or import into Obsidian/Notion
-- 🔒 **Fully offline** — everything runs on localhost
+- 🗑 **Recoverable deletes** — removed entries move to `journals/.trash/`, never straight to oblivion
+- 🔒 **Runs entirely on localhost** — nothing is sent anywhere
+- 📊 **Insights dashboard** — mood over time, tag cloud, and entry streaks *(planned)*
+- 🔍 **Search and tag filtering** *(planned)*
+- 📤 **Export to Markdown, JSON, or ZIP** *(planned)*
 
 ---
 
 ## Requirements
 
 - **OS:** Linux, macOS, or Windows (WSL2 recommended)
-- **GPU:** NVIDIA GPU with 4 GB+ VRAM (CUDA 11.8+), or Apple Silicon (Metal)
+- **GPU:** Recommended — NVIDIA with 4 GB+ VRAM (CUDA 11.8+), or Apple Silicon (Metal). Not required: without one, Whisper falls back to CPU and simply runs slower.
 - **Python:** 3.10+
 - **Browser:** Any modern browser (Chrome/Edge preferred for mic permissions)
 
@@ -69,13 +73,18 @@ nightly-journal-app/
 │   ├── stt.py              # faster-whisper transcription
 │   ├── llm.py              # Ollama client (summarize, tag, mood)
 │   ├── journal.py          # Entry CRUD and file storage
+│   ├── index.py            # In-memory entry index, built at startup
 │   └── models.py           # Pydantic schemas
 ├── journals/               # Your entries live here (gitignored)
+│   ├── .trash/             # Deleted entries, kept for recovery
 │   └── .gitkeep
+├── docs/
+│   └── adr/                # Architecture decision records
 ├── scripts/
 │   └── setup.sh
 ├── .env.example
 ├── requirements.txt
+├── GLOSSARY.md             # Project vocabulary — read this first
 ├── TODO.md
 └── README.md
 ```
@@ -114,10 +123,20 @@ cp .env.example .env
 ### 4. Start the backend
 
 ```bash
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 5. Open the frontend
+The Whisper model loads at startup, so a bad model name or a broken CUDA install fails here — before you've spoken into a microphone, rather than after.
+
+### 5. Check everything is wired up
+
+```bash
+curl http://localhost:8000/health
+```
+
+This reports which device Whisper actually landed on and whether Ollama is reachable. The frontend calls it on load and will not enable the record button until it passes.
+
+### 6. Open the frontend
 
 ```bash
 # Serve via FastAPI static files (default) — just open:
@@ -139,16 +158,22 @@ OLLAMA_TEMPERATURE=0.5
 
 # Whisper
 WHISPER_MODEL=base          # tiny | base | small | medium | large-v3
-WHISPER_DEVICE=cuda         # cuda | cpu | auto
+WHISPER_DEVICE=auto         # auto | cuda | cpu — auto falls back to CPU with a warning
 WHISPER_LANGUAGE=en         # or leave blank for auto-detect
 
 # Storage
 JOURNALS_DIR=./journals
+RETAIN_AUDIO=false          # true keeps the source recording alongside its entry
+
+# Journaling
+DAY_BOUNDARY_HOUR=4         # a journal day runs 04:00 → 04:00 local time
 
 # Backend
+BACKEND_HOST=127.0.0.1      # do not expose this to your network — see Privacy below
 BACKEND_PORT=8000
-CORS_ORIGIN=http://localhost:3000
 ```
+
+The mood vocabulary is deliberately **not** configurable — see [Mood vocabulary](#mood-vocabulary).
 
 ---
 
@@ -156,15 +181,18 @@ CORS_ORIGIN=http://localhost:3000
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/transcribe` | POST | Upload audio blob → returns raw transcript |
-| `/process` | POST | Send transcript → returns structured entry JSON (streaming) |
+| `/health` | GET | Backend status, the Whisper device actually in use, Ollama reachability |
+| `/transcribe` | POST | Upload audio blob → returns transcript + measured duration |
+| `/process` | POST | Send transcript → returns a **draft** entry (nothing is saved) |
+| `/entries` | POST | Save a reviewed draft as an entry |
 | `/entries` | GET | List all entries (metadata only) |
 | `/entries/{id}` | GET | Get full entry by ID |
-| `/entries/{id}` | PATCH | Edit title or summary |
-| `/entries/{id}` | DELETE | Delete an entry |
-| `/insights` | GET | Aggregated mood, tag, and streak data |
-| `/export` | GET | Download all entries as ZIP |
-| `/health` | GET | Check backend + Ollama status |
+| `/entries/{id}` | PATCH | Correct any model-derived field — never the transcript |
+| `/entries/{id}` | DELETE | Move an entry to `journals/.trash/` |
+| `/insights` | GET | Aggregated mood, tag, and streak data *(planned)* |
+| `/export` | GET | Download all entries as ZIP *(planned)* |
+
+`/process` is a pure function: it reads a transcript and returns a draft without touching disk. The draft lives in the browser until you `POST /entries`. Responses are returned complete rather than streamed.
 
 ### Example: process a transcript
 
@@ -195,6 +223,7 @@ Each entry is stored as a JSON file in `journals/`:
 {
   "id": "a3f9c2d1-...",
   "created_at": "2025-11-04T19:32:00Z",
+  "edited_at": null,
   "title": "A Tough Day Redeemed by an Evening Run",
   "summary": "Work felt overwhelming with self-doubt...",
   "raw_transcript": "Today was really tough at work, I kept second-guessing...",
@@ -205,7 +234,34 @@ Each entry is stored as a JSON file in `journals/`:
 }
 ```
 
-Files are named `YYYY-MM-DD_slugified-title.json` for easy browsing in your filesystem.
+Files are named `YYYY-MM-DD_slugified-title_ab12cd34.json`, where the suffix is the first eight characters of the entry's `id`. This keeps the folder sortable and readable while making lookup by ID a simple glob. See [ADR 0001](./docs/adr/0001-entry-filename-identity.md) — note that renaming an entry's title does *not* rename its file.
+
+`created_at` is stored in UTC, but entries are grouped into **journal days** that run from `DAY_BOUNDARY_HOUR` to the same hour next morning, so a 00:40 entry counts towards the night it describes. See [ADR 0002](./docs/adr/0002-journal-day-boundary.md).
+
+### What you can edit
+
+The transcript is the record; everything else is interpretation. `PATCH` may change the **title, summary, mood, tags, and action items** — anything the model produced, so you can correct it when it gets you wrong. It may never change `raw_transcript`, `id`, `created_at`, or `audio_duration_seconds`. The first edit sets `edited_at`, so a hand-corrected mood stays distinguishable from a generated one.
+
+Since the recording is discarded after transcription, a transcript can never be regenerated — which is precisely why it is immutable.
+
+---
+
+## Mood vocabulary
+
+Mood is a closed set fixed in code, not a configurable list. Each value carries a **valence** so that mood can be plotted on a real axis:
+
+| Mood | Valence |
+|---|---|
+| `grateful` | +1 |
+| `excited` | +1 |
+| `hopeful` | +1 |
+| `reflective` | 0 |
+| `neutral` | 0 |
+| `anxious` | −1 |
+| `frustrated` | −1 |
+| `sad` | −1 |
+
+A per-installation vocabulary would leave the mood chart with no stable axis and would silently invalidate older entries whenever it changed. Valence exists to order the chart — it is not a score of your day.
 
 ---
 
@@ -222,44 +278,84 @@ return ONLY a JSON object with these fields:
 - tags: array of 3–5 lowercase topic tags
 - action_items: array of any tasks or commitments mentioned (can be empty)
 
+Prefer these existing tags where they fit: {the author's current tags}
+
 Transcript: "..."
 ```
 
-Adjust the mood vocabulary and tag style in `.env` or directly in `backend/llm.py`.
+Tags stay free-form, but the author's existing tags are passed in as preferred vocabulary. Without this, the model invents `mental health`, `mental-health`, and `wellbeing` for the same idea, and the tag filter fragments into uselessness at exactly the point it would start being valuable.
+
+### Handling bad output
+
+The request is sent with Ollama's JSON-constrained output mode and the response is validated against the entry schema. On a validation failure the backend retries **once** with a repair prompt, then surfaces a clear error — while keeping the transcript in the draft. Losing a transcription to a malformed response would be the worst failure in the app, because by that point the recording is already gone.
+
+---
+
+## Privacy & Threat Model
+
+Be clear about what "local-first" buys you here, because a journal is about as sensitive as personal data gets.
+
+**What is protected:** no audio, transcript, or entry is ever sent off your machine. There is no telemetry, no account, and no network dependency beyond `localhost`.
+
+**What is not protected:**
+
+- **Entries are stored in plaintext.** Anyone who can read your filesystem can read your journal — including backup software, sync clients, and anyone with your unlocked machine.
+- **There is no authentication.** The API trusts every caller. The trust boundary is the machine, not the user.
+- **The backend binds to `127.0.0.1` by default. Leave it there.** Binding to `0.0.0.0` exposes an unauthenticated read/write journal API to everyone on your network.
+- **Deleted entries go to `journals/.trash/`,** not oblivion. Empty it yourself if you need something truly gone.
+
+Encryption at rest is on the roadmap, not in the build. Until then, treat `journals/` with the same care as the diary itself.
 
 ---
 
 ## Troubleshooting
 
-**Whisper is slow / using CPU instead of GPU**
-Confirm CUDA is available: `python -c "import torch; print(torch.cuda.is_available())"`. If False, reinstall PyTorch with the correct CUDA version for your system.
+**Whisper is running on CPU and feels slow**
+`WHISPER_DEVICE=auto` prefers CUDA but falls back to CPU rather than crashing, so a broken CUDA install shows up as slowness, not an error. Check which device it actually chose with `curl localhost:8000/health`. If it says `cpu` and you expected otherwise, confirm with `python -c "import torch; print(torch.cuda.is_available())"` and reinstall PyTorch for your CUDA version.
 
-**Ollama returns malformed JSON**
-Try a larger model — smaller models (e.g. `phi3:mini`) sometimes don't follow JSON instructions reliably. `llama3:8b` and `mistral:7b` are well-tested for structured output.
+**Backend fails on startup with a model error**
+The Whisper model loads at startup by design, so model and device problems surface before you record rather than after. Check `WHISPER_MODEL` is a valid size and that you have the VRAM for it.
+
+**Processing fails with a schema error**
+The backend already requests JSON-constrained output and retries once with a repair prompt. If it still fails, your model is struggling with structured output — `llama3:8b` and `mistral:7b` are well-tested; very small models like `phi3:mini` are not. Your transcript is preserved in the draft, so you can retry without re-recording.
 
 **Mic not working in the browser**
 Browsers require HTTPS or `localhost` for microphone access. Accessing via an IP address (e.g. `192.168.x.x`) will be blocked. Use `localhost:8000` directly.
 
-**Audio blob is empty or too short**
-The app requires at least 2 seconds of audio. Very short clips may produce empty Whisper transcripts. Check the browser console for `MediaRecorder` errors.
+**"Recording too short"**
+The backend requires at least 2 seconds of audio and measures the duration itself during transcription. Very short clips produce empty transcripts, so they're rejected before reaching the model.
+
+**I deleted an entry by accident**
+It's in `journals/.trash/`. Move the file back into `journals/` and restart the backend to rebuild the index.
+
+**An entry is filed under the wrong day**
+Entries are grouped by journal day, which ends at `DAY_BOUNDARY_HOUR` (default 04:00), so a 01:00 entry counts towards the previous evening. Adjust the hour if your hours are unusual — note that changing it re-buckets existing entries and can change your streak.
 
 **`journals/` directory not found**
-The backend creates this on startup automatically. If running the frontend standalone without the backend, create it manually: `mkdir journals`.
+The backend creates it on startup automatically. If running the frontend standalone without the backend, create it manually: `mkdir journals`.
 
 ---
 
 ## Roadmap
 
-See [TODO.md](./TODO.md) for the full phased build checklist.
+See [TODO.md](./TODO.md) for the full phased build checklist, and [GLOSSARY.md](./GLOSSARY.md) for the project's vocabulary.
 
-- [x] Project scaffolding and documentation
+**MVP — the core loop:**
+
+- [x] Project scaffolding, documentation, and domain model
 - [ ] MediaRecorder audio capture + Whisper transcription
 - [ ] Ollama structured processing pipeline
 - [ ] JSON entry storage and CRUD API
-- [ ] Frontend journal UI with sidebar and detail view
+- [ ] Minimal journal UI — sidebar list and entry detail
+
+**After the MVP:**
+
+- [ ] Search, tag filtering, and inline editing
 - [ ] Mood & insights dashboard
 - [ ] Export to Markdown / ZIP
+- [ ] Re-process an entry from its stored transcript
 - [ ] Semantic search with local embeddings
+- [ ] Encryption at rest
 - [ ] Electron desktop app packaging
 
 ---
@@ -267,6 +363,8 @@ See [TODO.md](./TODO.md) for the full phased build checklist.
 ## Contributing
 
 Issues and PRs welcome. Please open an issue before starting significant work. Keep pull requests focused on a single feature or fix.
+
+Read [GLOSSARY.md](./GLOSSARY.md) before contributing — terms like *entry*, *draft*, *transcript*, and *journal day* have precise meanings here, and the code is expected to use them consistently. Decisions that would be surprising without context are recorded in [docs/adr/](./docs/adr/).
 
 ```bash
 # Backend dev
