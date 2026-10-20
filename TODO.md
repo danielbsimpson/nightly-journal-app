@@ -14,11 +14,12 @@ Read [GLOSSARY.md](./GLOSSARY.md) first. *Entry*, *Draft*, *Recording*, *Transcr
 - [x] Add `README.md` with project overview and setup instructions
 - [x] Add `GLOSSARY.md` defining the domain vocabulary
 - [x] Record the non-obvious decisions as ADRs in `docs/adr/`
-- [ ] Create folder structure (see below)
-- [ ] Add `.gitignore` (node_modules, __pycache__, .env, journals/, *.wav, *.mp3, *.webm)
-- [ ] Add `LICENSE` file
-- [ ] Pin Python version with `.python-version`
-- [ ] Add `.env.example` with all config variables documented, including `RETAIN_AUDIO`, `DAY_BOUNDARY_HOUR`, and `BACKEND_HOST=127.0.0.1`
+- [x] Create the storage folders: `journals/` and `journals/.trash/`, each with a `.gitkeep` (`backend/`, `frontend/`, and `scripts/` arrive with their first real files — git can't track empty directories)
+- [x] Add `.gitignore` (node_modules, __pycache__, .env, journals/, *.wav, *.mp3, *.webm)
+- [x] Add `LICENSE` file
+- [x] Pin Python version with `.python-version`
+- [x] Add `.env.example` with all config variables documented, including `RETAIN_AUDIO`, `DAY_BOUNDARY_HOUR`, and `BACKEND_HOST=127.0.0.1`
+- [x] Add `requirements.txt`
 
 ```
 nightly-journal-app/

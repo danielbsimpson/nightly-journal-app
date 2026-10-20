@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Environment
+.env
+
+# Audio artifacts
+*.wav
+*.mp3
+*.webm
+*.m4a
+*.ogg
+
+# Journal entries are personal data — never commit them.
+# The folders themselves are tracked so a fresh clone has somewhere to write.
+journals/*
+!journals/.gitkeep
+!journals/.trash/
+journals/.trash/*
+!journals/.trash/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
