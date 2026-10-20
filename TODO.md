@@ -21,6 +21,12 @@ Read [GLOSSARY.md](./GLOSSARY.md) first. *Entry*, *Draft*, *Recording*, *Transcr
 - [x] Add `.env.example` with all config variables documented, including `RETAIN_AUDIO`, `DAY_BOUNDARY_HOUR`, and `BACKEND_HOST=127.0.0.1`
 - [x] Add `requirements.txt`
 
+**Open from Phase 1:**
+
+- [ ] Confirm the `LICENSE` copyright holder — currently "Daniel Simpson", inferred from the repo URL rather than confirmed
+- [ ] Commit the Phase 1 files — `.gitignore`, `.env.example`, `.python-version`, `LICENSE`, `requirements.txt`, and `journals/` are still untracked
+- `backend/`, `frontend/`, and `scripts/` are intentionally absent until their first real files land in Phase 2–3; git cannot track empty directories, so creating them now would achieve nothing on clone
+
 ```
 nightly-journal-app/
 ├── frontend/                   # Web UI
