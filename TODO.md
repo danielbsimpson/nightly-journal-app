@@ -58,16 +58,16 @@ nightly-journal-app/
 
 ## Phase 2 — Audio Recording (Frontend)
 
-- [ ] Call `/health` on page load; enable recording/transcription only when `transcription.ready` is true, and enable processing only when `processing.ready` is true
-- [ ] Implement `MediaRecorder` API in `app.js` to capture mic audio
-- [ ] Add a large, prominent record button with clear start/stop states
-- [ ] Show a live recording timer while capturing
-- [ ] Animate a waveform during recording (Web Audio API + canvas or CSS bars)
-- [ ] Save the Recording as a `webm` or `wav` blob in memory
-- [ ] Allow the user to preview/playback the Recording before submitting
-- [ ] Add a "re-record" option to discard and start over
-- [ ] POST the blob to `/transcribe`
-- [ ] Treat the client-side timer as a UI hint only — the backend measures the authoritative duration
+- [x] Call `/health` on page load; enable recording/transcription only when `transcription.ready` is true, and show processing readiness from `processing.ready`
+- [x] Implement `MediaRecorder` API in `app.js` to capture mic audio
+- [x] Add a large, prominent record button with clear start/stop states
+- [x] Show a live recording timer while capturing
+- [x] Animate a waveform during recording (Web Audio API + canvas or CSS bars)
+- [x] Save the Recording as a `webm` or `wav` blob in memory
+- [x] Allow the user to preview/playback the Recording before submitting
+- [x] Add a "re-record" option to discard and start over
+- [x] POST the blob to `/transcribe`
+- [x] Treat the client-side timer as a UI hint only — the backend measures the authoritative duration
 
 ---
 

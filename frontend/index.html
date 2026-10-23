@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111820">
+    <meta
+      name="description"
+      content="A private, local-first voice journal."
+    >
+    <title>Nightly Journal</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="site-header">
+        <a class="wordmark" href="/" aria-label="Nightly Journal home">
+          <span class="wordmark-mark" aria-hidden="true">n</span>
+          <span>nightly<span class="wordmark-light"> journal</span></span>
+        </a>
+        <p class="privacy-note">
+          <span class="privacy-dot" aria-hidden="true"></span>
+          Your voice stays on this device
+        </p>
+      </header>
+
+      <section class="journal-card" aria-labelledby="page-title">
+        <div class="card-topline">
+          <p class="eyebrow">A quiet moment for yourself</p>
+          <p class="date-label" id="today-label"></p>
+        </div>
+
+        <h1 id="page-title">What’s on your mind?</h1>
+        <p class="intro">
+          Speak freely. Your recording stays here until you choose to transcribe it.
+        </p>
+
+        <div class="readiness" aria-label="Service readiness">
+          <p class="readiness-label">Local services</p>
+          <ul class="readiness-list">
+            <li>
+              <span class="status-indicator" id="transcription-indicator" aria-hidden="true"></span>
+              <span>Transcription</span>
+              <span class="readiness-value" id="transcription-readiness">Checking…</span>
+            </li>
+            <li>
+              <span class="status-indicator" id="processing-indicator" aria-hidden="true"></span>
+              <span>Processing</span>
+              <span class="readiness-value" id="processing-readiness">Checking…</span>
+            </li>
+          </ul>
+          <p class="health-message" id="health-message" role="status" aria-live="polite">
+            Connecting to your local journal…
+          </p>
+        </div>
+
+        <div class="recording-panel">
+          <div class="waveform-frame" id="waveform-frame" data-recording="false">
+            <canvas id="waveform" aria-hidden="true"></canvas>
+            <div class="waveform-caption">
+              <span class="recording-indicator" aria-hidden="true"></span>
+              <span id="recording-status">Ready when you are</span>
+            </div>
+          </div>
+
+          <p class="recording-timer" id="recording-timer" aria-label="Recording time">00:00</p>
+
+          <div class="recording-actions">
+            <button class="record-button" id="record-button" type="button" disabled>
+              <span class="record-button-icon" aria-hidden="true"></span>
+              <span id="record-button-label">Start recording</span>
+            </button>
+            <p class="recording-hint" id="recording-hint">
+              Allow microphone access when your browser asks.
+            </p>
+          </div>
+        </div>
+
+        <section class="review-panel" id="review-panel" aria-labelledby="review-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Your recording</p>
+              <h2 id="review-title">Listen back before transcribing</h2>
+            </div>
+            <button class="text-button" id="retake-button" type="button">
+              Re-record
+            </button>
+          </div>
+          <audio id="recording-preview" controls preload="metadata">
+            Your browser does not support audio playback.
+          </audio>
+          <p class="measured-duration" id="measured-duration"></p>
+          <div class="transcribe-row">
+            <p class="helper-text">Nothing is uploaded until you choose Transcribe.</p>
+            <button class="primary-button" id="transcribe-button" type="button" disabled>
+              Transcribe recording
+            </button>
+          </div>
+          <p class="action-message" id="action-message" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="transcript-panel" id="transcript-panel" aria-labelledby="transcript-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Ready for your review</p>
+              <h2 id="transcript-title">Transcript</h2>
+            </div>
+          </div>
+          <label class="visually-hidden" for="transcript-text">Transcribed words</label>
+          <textarea id="transcript-text" rows="6" readonly></textarea>
+          <p class="measured-duration" id="transcript-duration"></p>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <span>Made for honest, unhurried reflection.</span>
+        <span>Local by design <span aria-hidden="true">·</span> Yours to keep</span>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -149,12 +149,15 @@ Ollama reachability is checked at startup and again for each `/health` request, 
 ### 6. Open the frontend
 
 ```bash
-# Serve via FastAPI static files (default) — just open:
+# Serve via FastAPI static files (once the backend is available):
 open http://localhost:8000
 
-# Or use live-server for hot-reload during development:
-npx live-server frontend/
+# Or serve the frontend directly during development:
+python -m http.server 8080 --directory frontend
+# Then open http://localhost:8080
 ```
+
+The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Processing readiness is shown separately, so an unavailable Ollama service does not prevent recording; the processing action is part of Phase 4. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
 
 ---
 
@@ -335,7 +338,7 @@ The backend already requests JSON-constrained output and retries once with a rep
 Browsers require HTTPS or `localhost` for microphone access. Accessing via an IP address (e.g. `192.168.x.x`) will be blocked. Use `localhost:8000` directly.
 
 **"Recording too short"**
-The backend requires at least 2 seconds and allows at most 10 minutes of audio, measuring duration itself during transcription. The UI stops capture at 10:00 but does not submit automatically; the user can then choose Transcribe. The backend rejects recordings measured at more than 600 seconds, so a client-side timer cannot bypass the limit. Very short clips produce empty transcripts, so they're rejected before reaching the model.
+The planned backend requires at least 2 seconds and allows at most 10 minutes of audio, measuring duration itself during transcription. Phase 3 adds those limits and will stop browser capture at 10:00 without auto-submitting; the backend's measurement remains authoritative. Very short clips can produce empty transcripts and will be rejected before reaching the model.
 
 **I deleted an entry by accident**
 It's in `journals/.trash/`. Move the file back into `journals/` and restart the backend to rebuild the index.
