@@ -58,7 +58,7 @@ nightly-journal-app/
 
 ## Phase 2 — Audio Recording (Frontend)
 
-- [ ] Call `/health` on page load; keep the record button disabled until it passes
+- [ ] Call `/health` on page load; enable recording/transcription only when `transcription.ready` is true, and enable processing only when `processing.ready` is true
 - [ ] Implement `MediaRecorder` API in `app.js` to capture mic audio
 - [ ] Add a large, prominent record button with clear start/stop states
 - [ ] Show a live recording timer while capturing
@@ -79,8 +79,11 @@ nightly-journal-app/
 - [ ] Load the model at startup, not on first request, so failures surface before anyone records
 - [ ] Default `WHISPER_DEVICE=auto`: prefer CUDA, fall back to CPU with a loud warning rather than crashing
 - [ ] Report the device actually in use via `/health`
+- [ ] Return HTTP 200 from `/health` whenever the API is responsive, with `status` set to `ready` or `degraded` and separate transcription and processing readiness
+- [ ] Check Ollama reachability at startup and on each `/health` request with a 2-second timeout; keep the backend running in degraded state if Ollama is unavailable
 - [ ] Save the Recording temporarily, transcribe, then delete it — unless `RETAIN_AUDIO=true`
 - [ ] Enforce the 2-second minimum here, using the measured duration
+- [ ] Stop browser recording at 10 minutes and reject backend-measured audio longer than 600 seconds; do not auto-submit when the UI stops
 - [ ] Choose default model size (`base` is a good balance of speed vs accuracy)
 - [ ] Make model size configurable via `.env` (`WHISPER_MODEL=base`)
 - [ ] Handle errors gracefully: empty audio, too-short clips, noisy input
@@ -97,8 +100,9 @@ nightly-journal-app/
 - [ ] Validate the response against the Pydantic schema
 - [ ] On validation failure, retry **once** with a repair prompt, then fail with a clear error
 - [ ] On failure, keep the Transcript in the Draft so the user never loses a transcription
+- [ ] Return `{ "error": { "code": "...", "message": "...", "retryable": true } }` for failures: `503 OLLAMA_UNAVAILABLE`, `502 PROCESSING_FAILED` after repair, or `504 PROCESSING_TIMEOUT`
+- [ ] Enforce one 120-second total `/process` deadline, including the optional repair attempt; make failures user-retryable without exposing raw provider errors or returning a partial Draft
 - [ ] Return the complete object — no streaming (parsing partial JSON isn't worth the complexity)
-- [ ] Report Ollama reachability via `/health` at startup, not on first use
 - [ ] Make model name and temperature configurable via `.env`
 - [ ] Test with multiple models and document quality differences in README
 
@@ -201,7 +205,8 @@ nightly-journal-app/
 - [ ] Add `Makefile` targets: `make start`, `make backend`, `make frontend`, `make clean`
 - [ ] Add hot-reload for backend: `uvicorn --reload --host 127.0.0.1`
 - [ ] Serve frontend via FastAPI static files or a separate `live-server`
-- [ ] Write at least one integration test: record audio → transcribe → process → save → retrieve
+- [ ] Write at least one full-pipeline integration test: record audio → transcribe → process → save → retrieve, injecting fake Whisper and Ollama dependencies
+- [ ] Keep routine API/pipeline tests independent of model downloads and services; add an opt-in live smoke test using a short audio fixture and fixed transcript, asserting non-empty transcription and a schema-valid Draft
 - [ ] Add a test that a Journal Day boundary case (00:40 entry) buckets to the previous day
 - [ ] Add basic input validation and error handling throughout the API
 - [ ] Lint with `ruff check backend/`
@@ -210,15 +215,19 @@ nightly-journal-app/
 
 ## Stretch Goals
 
-- [ ] Wake word to start recording hands-free ("Hey Journal...")
-- [ ] Daily reminder / notification to make an entry (desktop notification API)
-- [ ] Voice playback of the generated journal entry (TTS)
-- [ ] Encrypt the `journals/` folder at rest — currently entries are plaintext on disk
-- [ ] Semantic search across entries using local embeddings (`nomic-embed-text` via Ollama) — needs an embedding store, which is the point at which the in-memory index should be revisited
-- [ ] Weekly summary — auto-generate a week-in-review entry from the past 7 entries
-- [ ] Electron app packaging for a standalone desktop experience
-- [ ] Mobile PWA support (record from phone, sync to desktop)
-- [ ] Custom guided reflection prompts shown before recording
+These define the end-state product; see the README roadmap for the product vision.
+
+- [ ] Opt-in desktop-only wake word, detected locally with a visible listening indicator; never save or transcribe audio before the wake word
+- [ ] One optional neutral evening reminder at an Author-chosen time; never mention Streaks, and skip it after an Entry is saved for that Journal Day
+- [ ] Local desktop text-to-speech for Summaries and Weekly Reviews
+- [ ] Encrypt Entries and the search index at rest with a non-recoverable journal passphrase
+- [ ] Semantic search across entries using local embeddings (`nomic-embed-text` via Ollama), with an encrypted index — the point at which the in-memory index should be revisited
+- [ ] Opt-in Weekly Reviews for Monday–Sunday Journal Days: generate on first unlock after the week ends, catch up missed weeks, skip empty weeks, mark outdated when sources change, and allow regenerate/delete but not edit
+- [ ] Installable desktop app packaging
+- [ ] Optional LAN phone capture: off by default, HTTPS with a guided local certificate, shared LAN password, all-phone sign-out on password change, capture/review/save only, no offline capture or archive browsing
+- [ ] Allow a phone to enter the separate journal passphrase only to unlock saving for its current recording session; never store it on the phone
+- [ ] Optional Prompts shown before recording and saved with the Entry as context, separate from the Transcript
+- [ ] Include Prompts and Weekly Reviews in JSON/Markdown exports; derive optional PDF or app-specific files locally from the same content
 
 Deliberately **not** planned: multi-user support. There is exactly one Author per installation, and adding users would change the storage model, the privacy model, and the meaning of a Streak.
 

@@ -134,7 +134,17 @@ The Whisper model loads at startup, so a bad model name or a broken CUDA install
 curl http://localhost:8000/health
 ```
 
-This reports which device Whisper actually landed on and whether Ollama is reachable. The frontend calls it on load and will not enable the record button until it passes.
+This returns HTTP 200 whenever the API is responsive and reports stage-specific readiness. `status` is `ready` when both stages are available and `degraded` otherwise; `transcription.ready` includes the actual Whisper device, while `processing.ready` reports Ollama availability. The frontend enables recording/transcription when transcription is ready and processing only when processing is ready.
+
+Ollama reachability is checked at startup and again for each `/health` request, with a 2-second timeout. If Ollama is unavailable, the backend still starts and reports degraded readiness; only processing is unavailable. Whisper startup failures remain fatal.
+
+```json
+{
+  "status": "degraded",
+  "transcription": { "ready": true, "device": "cpu" },
+  "processing": { "ready": false }
+}
+```
 
 ### 6. Open the frontend
 
@@ -181,7 +191,7 @@ The mood vocabulary is deliberately **not** configurable — see [Mood vocabular
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/health` | GET | Backend status, the Whisper device actually in use, Ollama reachability |
+| `/health` | GET | HTTP 200 when responsive; overall status and separate transcription/device and processing readiness |
 | `/transcribe` | POST | Upload audio blob → returns transcript + measured duration |
 | `/process` | POST | Send transcript → returns a **draft** entry (nothing is saved) |
 | `/entries` | POST | Save a reviewed draft as an entry |
@@ -192,7 +202,7 @@ The mood vocabulary is deliberately **not** configurable — see [Mood vocabular
 | `/insights` | GET | Aggregated mood, tag, and streak data *(planned)* |
 | `/export` | GET | Download all entries as ZIP *(planned)* |
 
-`/process` is a pure function: it reads a transcript and returns a draft without touching disk. The draft lives in the browser until you `POST /entries`. Responses are returned complete rather than streamed.
+`/process` is a pure function: it reads a transcript and returns a draft without touching disk. The draft lives in the browser until you `POST /entries`. Responses are returned complete rather than streamed. Each request has a 120-second total deadline, including the optional single repair attempt. Failures use `{ "error": { "code": "...", "message": "...", "retryable": true } }`: Ollama unavailable returns `503 OLLAMA_UNAVAILABLE`, invalid output after repair returns `502 PROCESSING_FAILED`, and the deadline returns `504 PROCESSING_TIMEOUT`. The frontend keeps the transcript available for an explicit retry; no partial Draft or raw provider error is returned.
 
 ### Example: process a transcript
 
@@ -287,7 +297,9 @@ Tags stay free-form, but the author's existing tags are passed in as preferred v
 
 ### Handling bad output
 
-The request is sent with Ollama's JSON-constrained output mode and the response is validated against the entry schema. On a validation failure the backend retries **once** with a repair prompt, then surfaces a clear error — while keeping the transcript in the draft. Losing a transcription to a malformed response would be the worst failure in the app, because by that point the recording is already gone.
+The request is sent with Ollama's JSON-constrained output mode and the response is validated against the entry schema. On a validation failure the backend retries **once** with a repair prompt. If the result is still invalid, `/process` returns `502 PROCESSING_FAILED`; unavailability returns `503 OLLAMA_UNAVAILABLE`, and exceeding the 120-second total request deadline returns `504 PROCESSING_TIMEOUT`. All use the stable error envelope described above, and the transcript remains in the browser draft for a user-triggered retry.
+
+Routine API and full-pipeline tests inject fake Whisper and Ollama dependencies, so they do not download models or require model services. An opt-in live smoke test uses a short audio fixture with Whisper and a fixed transcript with Ollama, asserting a non-empty transcript and a schema-valid Draft rather than exact generated wording. Keep the planned multiple-model coverage and document observed quality differences.
 
 ---
 
@@ -304,7 +316,7 @@ Be clear about what "local-first" buys you here, because a journal is about as s
 - **The backend binds to `127.0.0.1` by default. Leave it there.** Binding to `0.0.0.0` exposes an unauthenticated read/write journal API to everyone on your network.
 - **Deleted entries go to `journals/.trash/`,** not oblivion. Empty it yourself if you need something truly gone.
 
-Encryption at rest is on the roadmap, not in the build. Until then, treat `journals/` with the same care as the diary itself.
+Encryption at rest and optional phone capture over the local network are planned for the end product, not the current build; see the [Roadmap](#roadmap). Until then, treat `journals/` with the same care as the diary itself and leave the backend on `127.0.0.1`.
 
 ---
 
@@ -323,7 +335,7 @@ The backend already requests JSON-constrained output and retries once with a rep
 Browsers require HTTPS or `localhost` for microphone access. Accessing via an IP address (e.g. `192.168.x.x`) will be blocked. Use `localhost:8000` directly.
 
 **"Recording too short"**
-The backend requires at least 2 seconds of audio and measures the duration itself during transcription. Very short clips produce empty transcripts, so they're rejected before reaching the model.
+The backend requires at least 2 seconds and allows at most 10 minutes of audio, measuring duration itself during transcription. The UI stops capture at 10:00 but does not submit automatically; the user can then choose Transcribe. The backend rejects recordings measured at more than 600 seconds, so a client-side timer cannot bypass the limit. Very short clips produce empty transcripts, so they're rejected before reaching the model.
 
 **I deleted an entry by accident**
 It's in `journals/.trash/`. Move the file back into `journals/` and restart the backend to rebuild the index.
@@ -356,7 +368,18 @@ See [TODO.md](./TODO.md) for the full phased build checklist, and [GLOSSARY.md](
 - [ ] Re-process an entry from its stored transcript
 - [ ] Semantic search with local embeddings
 - [ ] Encryption at rest
-- [ ] Electron desktop app packaging
+- [ ] Installable desktop app packaging
+
+**End-state product:**
+
+The ideal product is a low-friction nightly reflection ritual: speaking and saving Entries comes first, the Author can meaningfully revisit past writing, and nothing undermines trust or shames them. Streaks may motivate but are never gamified.
+
+- **Devices:** an installable desktop app holds the journal. Optional LAN capture is off by default; when enabled, phones use HTTPS with a locally generated certificate (trusted once per phone with in-app guidance) and a shared LAN password. Changing that password signs out every phone. Phones can record, review, and save Entries, but cannot browse the archive or capture offline.
+- **Privacy:** Entries and the search index are encrypted at rest with a journal passphrase that is separate from the LAN password and cannot be recovered. A phone may enter the passphrase only to unlock saving for its current recording session and never stores it. Export requires unlocking and produces clearly labelled plaintext.
+- **Reflection:** the model structures, connects, and reflects back, but never advises or diagnoses. Optional Prompts are saved with an Entry as context, never as part of its Transcript.
+- **Weekly Reviews:** opt-in interpretations covering Monday–Sunday Journal Days. They are generated on the first unlock after a week ends, catch up missed weeks, skip weeks without Entries, become outdated when source Entries change, and are regenerated only after confirmation. They can be regenerated or deleted, but not edited, and do not affect Streaks.
+- **Revisiting:** keyword, Tag, and local semantic search; descriptive insights for mood valence, frequent Tags, Streak, and Entry counts; and an optional neutral evening reminder that never mentions Streaks and is skipped after an Entry is saved for that Journal Day.
+- **Export and extras:** JSON and Markdown exports include Entries, Prompts, and Weekly Reviews, with optional PDF or app-specific files derived locally from the same content. The opt-in desktop-only wake word runs locally with a visible listening indicator and never stores audio before the wake word. Local text-to-speech can read Summaries and Weekly Reviews on the desktop.
 
 ---
 

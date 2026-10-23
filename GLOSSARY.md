@@ -22,6 +22,14 @@ _Avoid_: User, Account, Owner
 The day an Entry is counted against, which ends in the small hours rather than at midnight. An Entry recorded shortly after midnight belongs to the Journal Day that just ended, matching how people talk about the night they are writing about.
 _Avoid_: Date, Calendar day, Night
 
+**Prompt**:
+An optional question shown to the Author before recording to guide what they say. When used, it is kept with the resulting Entry as context, but it is never part of the Transcript.
+_Avoid_: Question, Guide, Reflection prompt
+
+**Weekly Review**:
+A clearly labeled interpretation by the model spanning the Entries in one week of Journal Days, Monday through Sunday. It is not an Entry and does not count towards a Streak.
+_Avoid_: Weekly summary, Reflection, Digest
+
 **Streak**:
 The number of consecutive Journal Days up to and including the current one that contain at least one Entry. The current Journal Day counts towards the Streak until it ends unwritten, so a Streak is never shortened merely by the day being young.
 _Avoid_: Run, Chain, Consistency
