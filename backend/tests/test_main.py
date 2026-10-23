@@ -1,8 +1,9 @@
 """Tests for the HTTP contract: ``GET /health`` and ``POST /transcribe``.
 
-The Whisper model and Ollama are external boundaries. The model is injected as a
-fake Transcriber via ``app.state``; Ollama's probe is replaced with a stub. The
-temp-file lifecycle is exercised against the real filesystem through the endpoint.
+The Whisper model and llama-server are external boundaries. The model is injected
+as a fake Transcriber via ``app.state``; llama-server's probe is replaced with a
+stub. The temp-file lifecycle is exercised against the real filesystem through
+the endpoint.
 """
 
 from __future__ import annotations
@@ -29,9 +30,9 @@ class _FakeTranscriber:
         return self._result
 
 
-def _client(monkeypatch, *, transcriber, ollama_ready=True, settings=None):
+def _client(monkeypatch, *, transcriber, llm_ready=True, settings=None):
     settings = settings or Settings()
-    monkeypatch.setattr(main, "check_ollama", lambda *args, **kwargs: ollama_ready)
+    monkeypatch.setattr(main, "check_llama_server", lambda *args, **kwargs: llm_ready)
     app = main.create_app(settings)
     app.state.transcriber = transcriber
     return TestClient(app)
@@ -43,11 +44,11 @@ def _audio_upload(content: bytes = b"fake-audio-bytes"):
 
 # ─── GET /health ────────────────────────────────────────────────────────
 
-def test_health_is_ready_when_model_and_ollama_are_up(monkeypatch):
+def test_health_is_ready_when_model_and_llm_server_are_up(monkeypatch):
     client = _client(
         monkeypatch,
         transcriber=_FakeTranscriber(device="cuda"),
-        ollama_ready=True,
+        llm_ready=True,
     )
 
     response = client.get("/health")
@@ -59,11 +60,11 @@ def test_health_is_ready_when_model_and_ollama_are_up(monkeypatch):
     assert body["processing"] == {"ready": True}
 
 
-def test_health_is_degraded_when_ollama_is_down(monkeypatch):
+def test_health_is_degraded_when_llm_server_is_down(monkeypatch):
     client = _client(
         monkeypatch,
         transcriber=_FakeTranscriber(device="cpu"),
-        ollama_ready=False,
+        llm_ready=False,
     )
 
     response = client.get("/health")
@@ -76,7 +77,7 @@ def test_health_is_degraded_when_ollama_is_down(monkeypatch):
 
 
 def test_health_stays_responsive_when_the_model_failed_to_load(monkeypatch):
-    client = _client(monkeypatch, transcriber=None, ollama_ready=True)
+    client = _client(monkeypatch, transcriber=None, llm_ready=True)
 
     response = client.get("/health")
 

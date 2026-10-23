@@ -24,10 +24,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ─── Ollama ──────────────────────────────────────────────────────────
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3"
-    ollama_temperature: float = 0.5
+    # ─── llama.cpp (llama-server) ────────────────────────────────────────
+    llama_server_url: str = "http://localhost:8080"
+    llama_model: str = ""
+    llama_temperature: float = 0.5
 
     # ─── Whisper ─────────────────────────────────────────────────────────
     whisper_model: str = "base"

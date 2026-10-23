@@ -3,8 +3,8 @@
 Phase 3 wires up two endpoints:
 
 * ``GET /health`` — always returns 200 while the API is responsive, reporting
-  transcription and processing readiness separately (see ADR 0003) so an Ollama
-  outage never blocks recording or transcription.
+  transcription and processing readiness separately (see ADR 0003) so an
+  llama-server outage never blocks recording or transcription.
 * ``POST /transcribe`` — accepts a Recording, returns its Transcript and the
   backend-measured duration, then discards the audio unless ``RETAIN_AUDIO=true``.
 
@@ -24,7 +24,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from backend.config import Settings, get_settings
-from backend.ollama import check_ollama
+from backend.llm import check_llama_server
 from backend.stt import (
     AudioTooLongError,
     AudioTooShortError,
@@ -60,13 +60,13 @@ def _load_transcriber(settings: Settings) -> Transcriber | None:
 async def _lifespan(app: FastAPI):
     settings = app.state.settings
     app.state.transcriber = _load_transcriber(settings)
-    if check_ollama(settings.ollama_base_url):
-        logger.info("Ollama is reachable at %s.", settings.ollama_base_url)
+    if check_llama_server(settings.llama_server_url):
+        logger.info("llama-server is reachable at %s.", settings.llama_server_url)
     else:
         logger.warning(
-            "Ollama is unreachable at %s; processing will be degraded until it is "
-            "available. Recording and transcription are unaffected.",
-            settings.ollama_base_url,
+            "llama-server is unreachable at %s; processing will be degraded until "
+            "it is available. Recording and transcription are unaffected.",
+            settings.llama_server_url,
         )
     yield
 
@@ -81,7 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict:
         transcriber = app.state.transcriber
         transcription_ready = transcriber is not None
-        processing_ready = check_ollama(app.state.settings.ollama_base_url)
+        processing_ready = check_llama_server(app.state.settings.llama_server_url)
         status = "ready" if transcription_ready and processing_ready else "degraded"
         return {
             "status": status,

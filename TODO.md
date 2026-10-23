@@ -1,6 +1,6 @@
 # Voice Journal — Project TODO
 
-A local-first app to record your thoughts via speech, then automatically summarize, organize, and save them as structured journal entries — powered by Whisper and Ollama.
+A local-first app to record your thoughts via speech, then automatically summarize, organize, and save them as structured journal entries — powered by Whisper and llama.cpp.
 
 Read [GLOSSARY.md](./GLOSSARY.md) first. *Entry*, *Draft*, *Recording*, *Transcript*, and *Journal Day* all have precise meanings, and the tasks below assume them.
 
@@ -36,7 +36,7 @@ nightly-journal-app/
 ├── backend/
 │   ├── main.py                 # FastAPI entrypoint
 │   ├── stt.py                  # Whisper transcription
-│   ├── llm.py                  # Ollama summarize/organize client
+│   ├── llm.py                  # llama.cpp summarize/organize client
 │   ├── journal.py              # Entry creation, storage, retrieval
 │   ├── index.py                # In-memory entry index, built at startup
 │   └── models.py               # Pydantic data models
@@ -80,7 +80,7 @@ nightly-journal-app/
 - [x] Default `WHISPER_DEVICE=auto`: prefer CUDA, fall back to CPU with a loud warning rather than crashing
 - [x] Report the device actually in use via `/health`
 - [x] Return HTTP 200 from `/health` whenever the API is responsive, with `status` set to `ready` or `degraded` and separate transcription and processing readiness
-- [x] Check Ollama reachability at startup and on each `/health` request with a 2-second timeout; keep the backend running in degraded state if Ollama is unavailable
+- [x] Check llama-server reachability at startup and on each `/health` request with a 2-second timeout; keep the backend running in degraded state if it is unavailable
 - [x] Save the Recording temporarily, transcribe, then delete it — unless `RETAIN_AUDIO=true`
 - [x] Enforce the 2-second minimum here, using the measured duration
 - [x] Stop browser recording at 10 minutes and reject backend-measured audio longer than 600 seconds; do not auto-submit when the UI stops
@@ -91,20 +91,21 @@ nightly-journal-app/
 
 ---
 
-## Phase 4 — LLM Processing (Ollama)
+## Phase 4 — LLM Processing (llama.cpp)
 
-- [ ] Install Ollama and pull a model: `ollama pull llama3`
-- [ ] Write `backend/llm.py` using Ollama's JSON-constrained output mode
+- [ ] Run `llama-server` (from `C:\llama.cpp`) with a GGUF model — e.g. `llama-server -hf <user>/<repo-GGUF> --port 8080 --jinja` or `llama-server -m <path-to-model.gguf> --port 8080 --jinja` — reusing the model already downloaded for other projects rather than fetching a new one
+- [ ] Write `backend/llm.py` talking to llama-server's OpenAI-compatible `/v1/chat/completions`, using JSON-schema constrained output (`response_format: { "type": "json_schema", ... }`, backed by llama.cpp's GBNF grammars)
 - [ ] Design and test the core prompt (see Prompt Design section below)
 - [ ] Add `/process` POST endpoint — accept a Transcript, return a **Draft**; never write to disk
 - [ ] Validate the response against the Pydantic schema
 - [ ] On validation failure, retry **once** with a repair prompt, then fail with a clear error
 - [ ] On failure, keep the Transcript in the Draft so the user never loses a transcription
-- [ ] Return `{ "error": { "code": "...", "message": "...", "retryable": true } }` for failures: `503 OLLAMA_UNAVAILABLE`, `502 PROCESSING_FAILED` after repair, or `504 PROCESSING_TIMEOUT`
+- [ ] Return `{ "error": { "code": "...", "message": "...", "retryable": true } }` for failures: `503 LLM_UNAVAILABLE`, `502 PROCESSING_FAILED` after repair, or `504 PROCESSING_TIMEOUT`
 - [ ] Enforce one 120-second total `/process` deadline, including the optional repair attempt; make failures user-retryable without exposing raw provider errors or returning a partial Draft
 - [ ] Return the complete object — no streaming (parsing partial JSON isn't worth the complexity)
-- [ ] Make model name and temperature configurable via `.env`
-- [ ] Test with multiple models and document quality differences in README
+- [ ] Make the llama-server URL, model, and temperature configurable via `.env` (`LLAMA_SERVER_URL`, `LLAMA_MODEL`, `LLAMA_TEMPERATURE`)
+- [ ] Grow the existing readiness probe (`check_llama_server`, wired into startup and `/health` in Phase 3) into the full client, so a down server degrades processing without blocking transcription
+- [ ] Test with multiple GGUF models and document quality differences in README
 
 ### Prompt Design
 
@@ -201,11 +202,11 @@ nightly-journal-app/
 
 ## Phase 9 — DevEx & Tooling
 
-- [ ] Write `scripts/setup.sh` — install Python deps, check Ollama, create journals/ dir
+- [ ] Write `scripts/setup.sh` — install Python deps, check llama-server, create journals/ dir
 - [ ] Add `Makefile` targets: `make start`, `make backend`, `make frontend`, `make clean`
 - [ ] Add hot-reload for backend: `uvicorn --reload --host 127.0.0.1`
 - [ ] Serve frontend via FastAPI static files or a separate `live-server`
-- [ ] Write at least one full-pipeline integration test: record audio → transcribe → process → save → retrieve, injecting fake Whisper and Ollama dependencies
+- [ ] Write at least one full-pipeline integration test: record audio → transcribe → process → save → retrieve, injecting fake Whisper and llama.cpp dependencies
 - [ ] Keep routine API/pipeline tests independent of model downloads and services; add an opt-in live smoke test using a short audio fixture and fixed transcript, asserting non-empty transcription and a schema-valid Draft
 - [ ] Add a test that a Journal Day boundary case (00:40 entry) buckets to the previous day
 - [ ] Add basic input validation and error handling throughout the API
@@ -221,7 +222,7 @@ These define the end-state product; see the README roadmap for the product visio
 - [ ] One optional neutral evening reminder at an Author-chosen time; never mention Streaks, and skip it after an Entry is saved for that Journal Day
 - [ ] Local desktop text-to-speech for Summaries and Weekly Reviews
 - [ ] Encrypt Entries and the search index at rest with a non-recoverable journal passphrase
-- [ ] Semantic search across entries using local embeddings (`nomic-embed-text` via Ollama), with an encrypted index — the point at which the in-memory index should be revisited
+- [ ] Semantic search across entries using local embeddings (`nomic-embed-text` via llama.cpp), with an encrypted index — the point at which the in-memory index should be revisited
 - [ ] Opt-in Weekly Reviews for Monday–Sunday Journal Days: generate on first unlock after the week ends, catch up missed weeks, skip empty weeks, mark outdated when sources change, and allow regenerate/delete but not edit
 - [ ] Installable desktop app packaging
 - [ ] Optional LAN phone capture: off by default, HTTPS with a guided local certificate, shared LAN password, all-phone sign-out on password change, capture/review/save only, no offline capture or archive browsing
@@ -239,7 +240,7 @@ Deliberately **not** planned: multi-user support. There is exactly one Author pe
 |---|---|---|
 | Audio recording | MediaRecorder API | Browser-native, no deps |
 | Speech-to-text | faster-whisper | Local, GPU-accelerated with CPU fallback |
-| LLM processing | Ollama (Llama 3 / Mistral) | Summarize, tag, detect mood; JSON-constrained output |
+| LLM processing | llama.cpp (llama-server, GGUF) | Summarize, tag, detect mood; JSON-schema constrained output |
 | Storage | JSON files on disk | Source of truth; portable, no DB needed |
 | Indexing | In-memory, built at startup | Pure derived state — safe to throw away and rebuild |
 | Backend | FastAPI + uvicorn | Lightweight Python API, bound to localhost |

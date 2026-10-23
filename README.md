@@ -1,9 +1,9 @@
 # Voice Journal
 
-A local-first journaling app that turns your spoken thoughts into structured, searchable journal entries. Press record, speak freely, and let Whisper transcribe and Ollama summarize, tag, and organize everything — entirely on your own machine.
+A local-first journaling app that turns your spoken thoughts into structured, searchable journal entries. Press record, speak freely, and let Whisper transcribe and llama.cpp summarize, tag, and organize everything — entirely on your own machine.
 
 ```
-Microphone → Whisper (STT) → Ollama (LLM) → Structured Journal Entry → Local Storage
+Microphone → Whisper (STT) → llama.cpp (LLM) → Structured Journal Entry → Local Storage
 ```
 
 No cloud. No subscriptions. Everything runs on your own machine — see [Privacy & Threat Model](#privacy--threat-model) for exactly what that does and does not protect.
@@ -14,7 +14,7 @@ No cloud. No subscriptions. Everything runs on your own machine — see [Privacy
 
 1. **Record** — hit the mic button and speak your thoughts, unfiltered
 2. **Transcribe** — faster-whisper converts your speech to text locally; the audio itself is then discarded
-3. **Process** — Ollama reads the transcript and produces a **draft** containing:
+3. **Process** — llama.cpp reads the transcript and produces a **draft** containing:
    - A clean, readable **summary**
    - A meaningful **title**
    - A **mood**, chosen from a fixed set (reflective, anxious, grateful, excited…)
@@ -31,7 +31,7 @@ The draft in step 4 lives in your browser and is never written to disk until you
 ## Features
 
 - 🎙 **Local speech-to-text** via faster-whisper — audio is transcribed on your machine, then deleted
-- 🧠 **LLM-powered journaling** via Ollama — summarize, title, tag, and detect mood
+- 🧠 **LLM-powered journaling** via llama.cpp — summarize, title, tag, and detect mood
 - 📓 **Clean journal UI** with sidebar navigation and an entry detail view
 - 💾 **Plain JSON storage** — no database, entries are readable files you own
 - 🗑 **Recoverable deletes** — removed entries move to `journals/.trash/`, never straight to oblivion
@@ -51,12 +51,12 @@ The draft in step 4 lives in your browser and is never written to disk until you
 
 ### Recommended GPU / model pairings
 
-| GPU VRAM | Whisper model | LLM model |
+| GPU VRAM | Whisper model | LLM model (GGUF) |
 |---|---|---|
-| 4 GB | `base` | `mistral:7b` |
-| 6 GB | `small` | `llama3:8b` |
-| 8 GB | `medium` | `llama3:8b` |
-| 16 GB+ | `large-v3` | `llama3:13b` |
+| 4 GB | `base` | Mistral 7B (Q4) |
+| 6 GB | `small` | Llama 3.1 8B (Q4) |
+| 8 GB | `medium` | Llama 3.1 8B (Q5) |
+| 16 GB+ | `large-v3` | Llama 3.3 70B (quantized) |
 
 ---
 
@@ -71,7 +71,7 @@ nightly-journal-app/
 ├── backend/
 │   ├── main.py             # FastAPI app + route definitions
 │   ├── stt.py              # faster-whisper transcription
-│   ├── llm.py              # Ollama client (summarize, tag, mood)
+│   ├── llm.py              # llama.cpp client (summarize, tag, mood)
 │   ├── journal.py          # Entry CRUD and file storage
 │   ├── index.py            # In-memory entry index, built at startup
 │   └── models.py           # Pydantic schemas
@@ -93,13 +93,19 @@ nightly-journal-app/
 
 ## Quickstart
 
-### 1. Install Ollama and pull a model
+### 1. Start llama.cpp (llama-server) with a model
+
+`llama-server` ships with [llama.cpp](https://github.com/ggml-org/llama.cpp); on this machine it lives in `C:\llama.cpp`. Point it at a GGUF model — reuse one you already have, or let it pull from Hugging Face:
 
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3
-ollama serve
+# Pull + serve a GGUF from Hugging Face (cached for next time)
+llama-server -hf <user>/<repo-GGUF> --port 8080 --jinja
+
+# …or serve a local GGUF file
+llama-server -m /path/to/model.gguf --port 8080 --jinja
 ```
+
+This exposes an OpenAI-compatible API at `http://localhost:8080`; the backend reads its transcript-processing responses with JSON-schema constrained output.
 
 ### 2. Clone and install
 
@@ -134,9 +140,9 @@ The Whisper model loads at startup, so a bad model name or a broken CUDA install
 curl http://localhost:8000/health
 ```
 
-This returns HTTP 200 whenever the API is responsive and reports stage-specific readiness. `status` is `ready` when both stages are available and `degraded` otherwise; `transcription.ready` includes the actual Whisper device, while `processing.ready` reports Ollama availability. The frontend enables recording/transcription when transcription is ready and processing only when processing is ready.
+This returns HTTP 200 whenever the API is responsive and reports stage-specific readiness. `status` is `ready` when both stages are available and `degraded` otherwise; `transcription.ready` includes the actual Whisper device, while `processing.ready` reports llama-server availability. The frontend enables recording/transcription when transcription is ready and processing only when processing is ready.
 
-Ollama reachability is checked at startup and again for each `/health` request, with a 2-second timeout. If Ollama is unavailable, the backend still starts and reports degraded readiness; only processing is unavailable. Whisper startup failures remain fatal.
+llama-server reachability is checked at startup and again for each `/health` request, with a 2-second timeout. If llama-server is unavailable, the backend still starts and reports degraded readiness; only processing is unavailable. Whisper startup failures remain fatal.
 
 ```json
 {
@@ -157,17 +163,17 @@ python -m http.server 8080 --directory frontend
 # Then open http://localhost:8080
 ```
 
-The standalone server previews the UI, but its `/health`, `/transcribe`, and `/process` requests require the API to be served from the same origin; interactive recording becomes available when the backend serves the frontend. The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Transcript processing is separately disabled unless `processing.ready` is true, so an unavailable Ollama service does not prevent recording. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
+The standalone server previews the UI, but its `/health`, `/transcribe`, and `/process` requests require the API to be served from the same origin; interactive recording becomes available when the backend serves the frontend. The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Transcript processing is separately disabled unless `processing.ready` is true, so an unavailable llama-server does not prevent recording. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
 
 ---
 
 ## Configuration
 
 ```env
-# Ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-OLLAMA_TEMPERATURE=0.5
+# llama.cpp (llama-server)
+LLAMA_SERVER_URL=http://localhost:8080
+LLAMA_MODEL=                # blank = use whichever GGUF llama-server was launched with
+LLAMA_TEMPERATURE=0.5
 
 # Whisper
 WHISPER_MODEL=base          # tiny | base | small | medium | large-v3
@@ -205,7 +211,7 @@ The mood vocabulary is deliberately **not** configurable — see [Mood vocabular
 | `/insights` | GET | Aggregated mood, tag, and streak data *(planned)* |
 | `/export` | GET | Download all entries as ZIP *(planned)* |
 
-`/process` is a pure function: it reads a transcript and returns a draft without touching disk. The draft lives in the browser until you `POST /entries`. Responses are returned complete rather than streamed. Each request has a 120-second total deadline, including the optional single repair attempt. Failures use `{ "error": { "code": "...", "message": "...", "retryable": true } }`: Ollama unavailable returns `503 OLLAMA_UNAVAILABLE`, invalid output after repair returns `502 PROCESSING_FAILED`, and the deadline returns `504 PROCESSING_TIMEOUT`. The frontend keeps the transcript available for an explicit retry; no partial Draft or raw provider error is returned.
+`/process` is a pure function: it reads a transcript and returns a draft without touching disk. The draft lives in the browser until you `POST /entries`. Responses are returned complete rather than streamed. Each request has a 120-second total deadline, including the optional single repair attempt. Failures use `{ "error": { "code": "...", "message": "...", "retryable": true } }`: llama-server unavailable returns `503 LLM_UNAVAILABLE`, invalid output after repair returns `502 PROCESSING_FAILED`, and the deadline returns `504 PROCESSING_TIMEOUT`. The frontend keeps the transcript available for an explicit retry; no partial Draft or raw provider error is returned.
 
 ### Example: process a transcript
 
@@ -280,7 +286,7 @@ A per-installation vocabulary would leave the mood chart with no stable axis and
 
 ## LLM Prompt Design
 
-The core processing prompt asks Ollama to return a single JSON object from the transcript. A simplified version:
+The core processing prompt asks llama.cpp to return a single JSON object from the transcript. A simplified version:
 
 ```
 You are a thoughtful journaling assistant. Given a raw spoken transcript, 
@@ -300,9 +306,9 @@ Tags stay free-form, but the author's existing tags are passed in as preferred v
 
 ### Handling bad output
 
-The request is sent with Ollama's JSON-constrained output mode and the response is validated against the entry schema. On a validation failure the backend retries **once** with a repair prompt. If the result is still invalid, `/process` returns `502 PROCESSING_FAILED`; unavailability returns `503 OLLAMA_UNAVAILABLE`, and exceeding the 120-second total request deadline returns `504 PROCESSING_TIMEOUT`. All use the stable error envelope described above, and the transcript remains in the browser draft for a user-triggered retry.
+The request is sent with llama.cpp's JSON-schema constrained output (backed by GBNF grammars) and the response is validated against the entry schema. On a validation failure the backend retries **once** with a repair prompt. If the result is still invalid, `/process` returns `502 PROCESSING_FAILED`; unavailability returns `503 LLM_UNAVAILABLE`, and exceeding the 120-second total request deadline returns `504 PROCESSING_TIMEOUT`. All use the stable error envelope described above, and the transcript remains in the browser draft for a user-triggered retry.
 
-Routine API and full-pipeline tests inject fake Whisper and Ollama dependencies, so they do not download models or require model services. An opt-in live smoke test uses a short audio fixture with Whisper and a fixed transcript with Ollama, asserting a non-empty transcript and a schema-valid Draft rather than exact generated wording. Keep the planned multiple-model coverage and document observed quality differences.
+Routine API and full-pipeline tests inject fake Whisper and llama.cpp dependencies, so they do not download models or require model services. An opt-in live smoke test uses a short audio fixture with Whisper and a fixed transcript with llama.cpp, asserting a non-empty transcript and a schema-valid Draft rather than exact generated wording. Keep the planned multiple-model coverage and document observed quality differences.
 
 ---
 
@@ -359,7 +365,7 @@ See [TODO.md](./TODO.md) for the full phased build checklist, and [GLOSSARY.md](
 
 - [x] Project scaffolding, documentation, and domain model
 - [x] MediaRecorder audio capture + Whisper transcription
-- [ ] Ollama structured processing pipeline
+- [ ] llama.cpp structured processing pipeline
 - [ ] JSON entry storage and CRUD API
 - [ ] Minimal journal UI — sidebar list and entry detail
 
