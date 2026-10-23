@@ -45,6 +45,7 @@
   let audioChunks = [];
   let processingInProgress = false;
   let transcriptionInProgress = false;
+  let microphoneRequestInProgress = false;
 
   dateLabel.textContent = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
@@ -69,7 +70,13 @@
 
   function updateControls() {
     const isRecording = mediaRecorder?.state === "recording";
-    recordButton.disabled = !isRecording && (!transcriptionReady || Boolean(recordingBlob));
+    recordButton.disabled = !isRecording && (
+      !transcriptionReady
+      || Boolean(recordingBlob)
+      || processingInProgress
+      || transcriptionInProgress
+      || microphoneRequestInProgress
+    );
     recordButton.setAttribute("aria-pressed", String(isRecording));
     recordButtonLabel.textContent = isRecording ? "Stop recording" : "Start recording";
     transcribeButton.disabled = !recordingBlob
@@ -215,6 +222,19 @@
     preview.removeAttribute("src");
     preview.load();
     reviewPanel.hidden = true;
+    clearTranscript();
+    measuredDuration.textContent = "";
+    transcriptDuration.textContent = "";
+    recordingTimer.textContent = "00:00";
+    waveformFrame.dataset.recording = "false";
+    recordingStatus.textContent = "Ready when you are";
+    recordingHint.textContent = "Allow microphone access when your browser asks.";
+    setActionMessage("");
+    setProcessingMessage("");
+    updateControls();
+  }
+
+  function clearTranscript() {
     transcriptPanel.hidden = true;
     transcriptText.value = "";
     draftPanel.hidden = true;
@@ -226,13 +246,7 @@
     draftActions.hidden = true;
     measuredDuration.textContent = "";
     transcriptDuration.textContent = "";
-    recordingTimer.textContent = "00:00";
-    waveformFrame.dataset.recording = "false";
-    recordingStatus.textContent = "Ready when you are";
-    recordingHint.textContent = "Allow microphone access when your browser asks.";
-    setActionMessage("");
     setProcessingMessage("");
-    updateControls();
   }
 
   function setProcessingMessage(message, isError = false) {
@@ -283,7 +297,13 @@
   }
 
   async function startRecording() {
-    if (!transcriptionReady || recordingBlob) {
+    if (
+      !transcriptionReady
+      || recordingBlob
+      || processingInProgress
+      || transcriptionInProgress
+      || microphoneRequestInProgress
+    ) {
       return;
     }
 
@@ -293,6 +313,8 @@
     }
 
     setActionMessage("");
+    microphoneRequestInProgress = true;
+    updateControls();
     recordingHint.textContent = "Requesting microphone access…";
 
     try {
@@ -345,6 +367,8 @@
       });
 
       mediaRecorder.start();
+      microphoneRequestInProgress = false;
+      clearTranscript();
       recordingStartedAt = performance.now();
       recordingTimer.textContent = "00:00";
       timerInterval = window.setInterval(updateTimer, 250);
@@ -366,6 +390,7 @@
 
       updateControls();
     } catch (error) {
+      microphoneRequestInProgress = false;
       stopTracks();
       stopTimer();
       stopWaveform();
@@ -430,7 +455,15 @@
         : "";
       measuredDuration.textContent = durationText;
       transcriptDuration.textContent = durationText;
-      setActionMessage("Transcription complete. Review your words below.");
+      releaseRecordingUrl();
+      recordingBlob = null;
+      audioChunks = [];
+      preview.removeAttribute("src");
+      preview.load();
+      reviewPanel.hidden = true;
+      recordingStatus.textContent = "Recording discarded";
+      recordingHint.textContent = "The recording was discarded after transcription.";
+      setActionMessage("Transcription complete. The recording was discarded; review your words below.");
     } catch (error) {
       setActionMessage(error.message || "Transcription failed. Please try again.", true);
     } finally {
