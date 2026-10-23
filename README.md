@@ -358,7 +358,7 @@ See [TODO.md](./TODO.md) for the full phased build checklist, and [GLOSSARY.md](
 **MVP — the core loop:**
 
 - [x] Project scaffolding, documentation, and domain model
-- [ ] MediaRecorder audio capture + Whisper transcription
+- [x] MediaRecorder audio capture + Whisper transcription
 - [ ] Ollama structured processing pipeline
 - [ ] JSON entry storage and CRUD API
 - [ ] Minimal journal UI — sidebar list and entry detail

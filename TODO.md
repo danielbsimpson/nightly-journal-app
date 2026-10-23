@@ -73,21 +73,21 @@ nightly-journal-app/
 
 ## Phase 3 — Speech-to-Text (Whisper)
 
-- [ ] Install faster-whisper: `pip install faster-whisper`
-- [ ] Write `backend/stt.py` with a `transcribe(audio_path)` function returning transcript **and** measured duration
-- [ ] Add `/transcribe` POST endpoint in `main.py` — accept audio, return both
-- [ ] Load the model at startup, not on first request, so failures surface before anyone records
-- [ ] Default `WHISPER_DEVICE=auto`: prefer CUDA, fall back to CPU with a loud warning rather than crashing
-- [ ] Report the device actually in use via `/health`
-- [ ] Return HTTP 200 from `/health` whenever the API is responsive, with `status` set to `ready` or `degraded` and separate transcription and processing readiness
-- [ ] Check Ollama reachability at startup and on each `/health` request with a 2-second timeout; keep the backend running in degraded state if Ollama is unavailable
-- [ ] Save the Recording temporarily, transcribe, then delete it — unless `RETAIN_AUDIO=true`
-- [ ] Enforce the 2-second minimum here, using the measured duration
-- [ ] Stop browser recording at 10 minutes and reject backend-measured audio longer than 600 seconds; do not auto-submit when the UI stops
-- [ ] Choose default model size (`base` is a good balance of speed vs accuracy)
-- [ ] Make model size configurable via `.env` (`WHISPER_MODEL=base`)
-- [ ] Handle errors gracefully: empty audio, too-short clips, noisy input
-- [ ] Return the Transcript to the frontend and display it for review before processing
+- [x] Install faster-whisper: `pip install faster-whisper`
+- [x] Write `backend/stt.py` with a `transcribe(audio_path)` function returning transcript **and** measured duration
+- [x] Add `/transcribe` POST endpoint in `main.py` — accept audio, return both
+- [x] Load the model at startup, not on first request, so failures surface before anyone records
+- [x] Default `WHISPER_DEVICE=auto`: prefer CUDA, fall back to CPU with a loud warning rather than crashing
+- [x] Report the device actually in use via `/health`
+- [x] Return HTTP 200 from `/health` whenever the API is responsive, with `status` set to `ready` or `degraded` and separate transcription and processing readiness
+- [x] Check Ollama reachability at startup and on each `/health` request with a 2-second timeout; keep the backend running in degraded state if Ollama is unavailable
+- [x] Save the Recording temporarily, transcribe, then delete it — unless `RETAIN_AUDIO=true`
+- [x] Enforce the 2-second minimum here, using the measured duration
+- [x] Stop browser recording at 10 minutes and reject backend-measured audio longer than 600 seconds; do not auto-submit when the UI stops
+- [x] Choose default model size (`base` is a good balance of speed vs accuracy)
+- [x] Make model size configurable via `.env` (`WHISPER_MODEL=base`)
+- [x] Handle errors gracefully: empty audio, too-short clips, noisy input
+- [x] Return the Transcript to the frontend and display it for review before processing
 
 ---
 

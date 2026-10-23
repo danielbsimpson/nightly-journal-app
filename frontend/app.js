@@ -47,6 +47,10 @@
   let transcriptionInProgress = false;
   let microphoneRequestInProgress = false;
 
+  // Hard ceiling matching the backend's 600-second limit. The browser stops
+  // capture here; the backend's measured duration remains authoritative.
+  const MAX_RECORDING_SECONDS = 600;
+
   dateLabel.textContent = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
     month: "long",
@@ -114,7 +118,17 @@
       return;
     }
 
-    recordingTimer.textContent = formatTime((performance.now() - recordingStartedAt) / 1000);
+    const elapsedSeconds = (performance.now() - recordingStartedAt) / 1000;
+    if (elapsedSeconds >= MAX_RECORDING_SECONDS) {
+      recordingTimer.textContent = formatTime(MAX_RECORDING_SECONDS);
+      if (mediaRecorder?.state === "recording") {
+        recordingHint.textContent = "Reached the 10-minute limit — review your recording below.";
+        stopRecording();
+      }
+      return;
+    }
+
+    recordingTimer.textContent = formatTime(elapsedSeconds);
   }
 
   function stopTimer() {
