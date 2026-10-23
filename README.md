@@ -157,7 +157,7 @@ python -m http.server 8080 --directory frontend
 # Then open http://localhost:8080
 ```
 
-The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Processing readiness is shown separately, so an unavailable Ollama service does not prevent recording; the processing action is part of Phase 4. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
+The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Transcript processing is separately disabled unless `processing.ready` is true, so an unavailable Ollama service does not prevent recording. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
 
 ---
 

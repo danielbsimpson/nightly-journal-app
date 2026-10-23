@@ -58,7 +58,7 @@ nightly-journal-app/
 
 ## Phase 2 — Audio Recording (Frontend)
 
-- [x] Call `/health` on page load; enable recording/transcription only when `transcription.ready` is true, and show processing readiness from `processing.ready`
+- [x] Call `/health` on page load; enable recording/transcription only when `transcription.ready` is true, and enable processing only when `processing.ready` is true
 - [x] Implement `MediaRecorder` API in `app.js` to capture mic audio
 - [x] Add a large, prominent record button with clear start/stop states
 - [x] Show a live recording timer while capturing

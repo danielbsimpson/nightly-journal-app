@@ -110,6 +110,30 @@
           <label class="visually-hidden" for="transcript-text">Transcribed words</label>
           <textarea id="transcript-text" rows="6" readonly></textarea>
           <p class="measured-duration" id="transcript-duration"></p>
+          <div class="process-row">
+            <p class="helper-text">Your transcript stays here unless you choose to process it.</p>
+            <button class="primary-button" id="process-button" type="button" disabled>
+              Process transcript
+            </button>
+          </div>
+          <p class="action-message" id="processing-message" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="draft-panel" id="draft-panel" aria-labelledby="draft-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Not saved</p>
+              <h2 id="draft-title">Your Draft</h2>
+            </div>
+          </div>
+          <h3 id="draft-heading"></h3>
+          <p class="draft-summary" id="draft-summary"></p>
+          <p class="draft-mood" id="draft-mood"></p>
+          <ul class="draft-tags" id="draft-tags" aria-label="Draft tags"></ul>
+          <div class="draft-actions" id="draft-actions" hidden>
+            <h3>Action items</h3>
+            <ul id="draft-action-items"></ul>
+          </div>
         </section>
       </section>
 

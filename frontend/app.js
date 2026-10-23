@@ -15,6 +15,15 @@
   const measuredDuration = document.querySelector("#measured-duration");
   const transcriptDuration = document.querySelector("#transcript-duration");
   const actionMessage = document.querySelector("#action-message");
+  const processButton = document.querySelector("#process-button");
+  const processingMessage = document.querySelector("#processing-message");
+  const draftPanel = document.querySelector("#draft-panel");
+  const draftHeading = document.querySelector("#draft-heading");
+  const draftSummary = document.querySelector("#draft-summary");
+  const draftMood = document.querySelector("#draft-mood");
+  const draftTags = document.querySelector("#draft-tags");
+  const draftActions = document.querySelector("#draft-actions");
+  const draftActionItems = document.querySelector("#draft-action-items");
   const healthMessage = document.querySelector("#health-message");
   const transcriptionIndicator = document.querySelector("#transcription-indicator");
   const processingIndicator = document.querySelector("#processing-indicator");
@@ -34,6 +43,8 @@
   let recordingBlob = null;
   let recordingUrl = null;
   let audioChunks = [];
+  let processingInProgress = false;
+  let transcriptionInProgress = false;
 
   dateLabel.textContent = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
@@ -61,8 +72,19 @@
     recordButton.disabled = !isRecording && (!transcriptionReady || Boolean(recordingBlob));
     recordButton.setAttribute("aria-pressed", String(isRecording));
     recordButtonLabel.textContent = isRecording ? "Stop recording" : "Start recording";
-    transcribeButton.disabled = !recordingBlob || !transcriptionReady || isRecording;
-    retakeButton.disabled = !recordingBlob || !transcriptionReady;
+    transcribeButton.disabled = !recordingBlob
+      || !transcriptionReady
+      || isRecording
+      || transcriptionInProgress
+      || processingInProgress;
+    retakeButton.disabled = !recordingBlob
+      || !transcriptionReady
+      || transcriptionInProgress
+      || processingInProgress;
+    processButton.disabled = !transcriptText.value.trim()
+      || !processingReady
+      || transcriptionInProgress
+      || processingInProgress;
   }
 
   function formatTime(totalSeconds) {
@@ -195,6 +217,13 @@
     reviewPanel.hidden = true;
     transcriptPanel.hidden = true;
     transcriptText.value = "";
+    draftPanel.hidden = true;
+    draftHeading.textContent = "";
+    draftSummary.textContent = "";
+    draftMood.textContent = "";
+    draftTags.replaceChildren();
+    draftActionItems.replaceChildren();
+    draftActions.hidden = true;
     measuredDuration.textContent = "";
     transcriptDuration.textContent = "";
     recordingTimer.textContent = "00:00";
@@ -202,7 +231,32 @@
     recordingStatus.textContent = "Ready when you are";
     recordingHint.textContent = "Allow microphone access when your browser asks.";
     setActionMessage("");
+    setProcessingMessage("");
     updateControls();
+  }
+
+  function setProcessingMessage(message, isError = false) {
+    processingMessage.textContent = message;
+    processingMessage.dataset.error = String(isError);
+  }
+
+  function renderDraft(draft) {
+    draftHeading.textContent = draft.title;
+    draftSummary.textContent = draft.summary;
+    draftMood.textContent = `Mood: ${draft.mood}`;
+    draftTags.replaceChildren(...draft.tags.map((tag) => {
+      const item = document.createElement("li");
+      item.textContent = tag;
+      return item;
+    }));
+    const actionItems = Array.isArray(draft.action_items) ? draft.action_items : [];
+    draftActionItems.replaceChildren(...actionItems.map((actionItem) => {
+      const item = document.createElement("li");
+      item.textContent = actionItem;
+      return item;
+    }));
+    draftActions.hidden = actionItems.length === 0;
+    draftPanel.hidden = false;
   }
 
   function chooseMimeType() {
@@ -331,8 +385,8 @@
 
   function stopRecording() {
     if (mediaRecorder?.state === "recording") {
-      mediaRecorder.stop();
       recordingStatus.textContent = "Preparing your recording…";
+      mediaRecorder.stop();
       updateControls();
     }
   }
@@ -346,8 +400,10 @@
     const filename = `recording.${extensionForMimeType(mimeType)}`;
     const formData = new FormData();
     formData.append("audio", recordingBlob, filename);
-    transcribeButton.disabled = true;
+    transcriptionInProgress = true;
+    draftPanel.hidden = true;
     setActionMessage("Transcribing on your device…");
+    updateControls();
 
     try {
       const response = await fetch("/transcribe", {
@@ -365,6 +421,7 @@
       }
 
       transcriptText.value = result.transcript;
+      draftPanel.hidden = true;
       transcriptPanel.hidden = false;
       transcriptPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
       const duration = result.audio_duration_seconds;
@@ -377,6 +434,61 @@
     } catch (error) {
       setActionMessage(error.message || "Transcription failed. Please try again.", true);
     } finally {
+      transcriptionInProgress = false;
+      updateControls();
+    }
+  }
+
+  async function processTranscript() {
+    const transcript = transcriptText.value.trim();
+    if (!transcript || !processingReady || processingInProgress) {
+      return;
+    }
+
+    processingInProgress = true;
+    setProcessingMessage("Preparing your Draft…");
+    draftPanel.hidden = true;
+    updateControls();
+
+    try {
+      const response = await fetch("/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        const failure = result && typeof result === "object" ? result.error : null;
+        const detail = typeof failure?.message === "string"
+          ? `${failure.code ? `${failure.code}: ` : ""}${failure.message}`
+          : `Processing failed (HTTP ${response.status}).`;
+        throw new Error(detail);
+      }
+      if (
+        !result
+        || typeof result !== "object"
+        || Array.isArray(result)
+        || typeof result.title !== "string"
+        || typeof result.summary !== "string"
+        || typeof result.mood !== "string"
+        || !Array.isArray(result.tags)
+        || !result.tags.every((tag) => typeof tag === "string")
+        || (
+          result.action_items !== undefined
+          && (!Array.isArray(result.action_items)
+            || !result.action_items.every((item) => typeof item === "string"))
+        )
+      ) {
+        throw new Error("The processing service returned an invalid Draft.");
+      }
+
+      renderDraft(result);
+      setProcessingMessage("Draft ready. It has not been saved.");
+    } catch (error) {
+      setProcessingMessage(error.message || "Processing failed. Please try again.", true);
+    } finally {
+      processingInProgress = false;
       updateControls();
     }
   }
@@ -439,6 +551,7 @@
   });
 
   transcribeButton.addEventListener("click", transcribeRecording);
+  processButton.addEventListener("click", processTranscript);
   window.addEventListener("resize", resizeWaveform);
   window.addEventListener("beforeunload", () => {
     stopTimer();
