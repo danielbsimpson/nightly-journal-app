@@ -152,12 +152,12 @@ Ollama reachability is checked at startup and again for each `/health` request, 
 # Serve via FastAPI static files (once the backend is available):
 open http://localhost:8000
 
-# Or serve the frontend directly during development:
+# Static UI preview only; API calls need the backend's same origin:
 python -m http.server 8080 --directory frontend
 # Then open http://localhost:8080
 ```
 
-The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Transcript processing is separately disabled unless `processing.ready` is true, so an unavailable Ollama service does not prevent recording. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
+The standalone server previews the UI, but its `/health`, `/transcribe`, and `/process` requests require the API to be served from the same origin; interactive recording becomes available when the backend serves the frontend. The recording page checks `/health` when it loads and keeps recording and transcription disabled unless `transcription.ready` is true. Transcript processing is separately disabled unless `processing.ready` is true, so an unavailable Ollama service does not prevent recording. Microphone access requires `localhost` or HTTPS; audio remains in memory until you choose to send it to `/transcribe`.
 
 ---
 
@@ -195,7 +195,7 @@ The mood vocabulary is deliberately **not** configurable — see [Mood vocabular
 | Endpoint | Method | Description |
 |---|---|---|
 | `/health` | GET | HTTP 200 when responsive; overall status and separate transcription/device and processing readiness |
-| `/transcribe` | POST | Upload audio blob → returns transcript + measured duration |
+| `/transcribe` | POST | Upload the `audio` multipart field → returns transcript + server-measured `audio_duration_seconds` |
 | `/process` | POST | Send transcript → returns a **draft** entry (nothing is saved) |
 | `/entries` | POST | Save a reviewed draft as an entry |
 | `/entries` | GET | List all entries (metadata only) |
